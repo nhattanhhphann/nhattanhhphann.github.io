@@ -1,897 +1,146 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Heart, X, ChevronDown, Play, Pause, SkipForward, SkipBack, 
-  ChevronRight, ChevronLeft, Pin, Volume2, Edit3, MessageCircle, Lock, Send, User, ShieldCheck
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-// --- FIREBASE IMPORTS ---
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
-
-// --- KHỞI TẠO FIREBASE ---
-let app, auth, db, appId;
-try {
-  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-  if (firebaseConfig) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-  }
-} catch (e) {
-  console.error("Firebase init error", e);
-}
-
-// --- STYLES PHÔNG CHỮ & CSS TÙY CHỈNH ---
-const globalStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Pattaya&family=Quicksand:wght@400;500;600;700&display=swap');
-  
-  .font-cursive { font-family: 'Pattaya', sans-serif; font-weight: 400; }
-  .font-sans { font-family: 'Quicksand', sans-serif; }
-  
-  .spin-slow { animation: spin 4s linear infinite; }
-  @keyframes spin { 100% { transform: rotate(360deg); } }
-  
-  .hide-scrollbar::-webkit-scrollbar { display: none; }
-  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-  @keyframes slowZoom {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-  .animate-zoom { animation: slowZoom 25s ease-in-out infinite; }
-
-  .gallery-scroll {
-    overflow-y: auto;
-    max-height: 600px;
-    padding-right: 10px;
-  }
-  .gallery-scroll::-webkit-scrollbar { width: 6px; }
-  .gallery-scroll::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
-  .gallery-scroll::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 10px; }
-  .gallery-scroll::-webkit-scrollbar-thumb:hover { background: #60a5fa; }
-`;
-
-// --- DỮ LIỆU MẶC ĐỊNH ---
-const MEMBERS = [
-  { id: 1, name: "Cô Ngọc Lan", nickname: "Mẹ Lan", role: "GVCN", hobby: "Dạy Văn, Trồng hoa", message: "Chúc các con luôn vững bước trên đường đời!", quote: "Học, học nữa, học mãi.", img: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=500&fit=crop" },
-  { id: 2, name: "Thầy Quốc Bảo", nickname: "Bố Bảo", role: "GVCN", hobby: "Toán học, Đá bóng", message: "Hãy tự tin vào chính mình các em nhé.", quote: "Thất bại là mẹ thành công.", img: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=500&fit=crop" },
-  { id: 3, name: "Thanh Bình", nickname: "Peace", role: "HS", hobby: "Chụp ảnh", message: "Mãi là bạn thân nhé!", quote: "Thanh xuân như một tách trà...", img: "https://i.pravatar.cc/300?img=1" },
-  { id: 4, name: "Thu Ngân", nickname: "Lụm", role: "HS", hobby: "Cafe", message: "Hẹn gặp lại!", quote: "Nụ cười không đánh thuế.", img: "https://i.pravatar.cc/300?img=5" },
-  { id: 5, name: "Lê Chi", nickname: "Chi Chi", role: "HS", hobby: "Vẽ tranh", message: "Thành công nhé!", quote: "Sống trọn từng phút giây.", img: "https://i.pravatar.cc/300?img=9" },
-  { id: 6, name: "Hoàng Dũng", nickname: "Dũng Béo", role: "HS", hobby: "Game", message: "Quyết tâm đỗ NV1!", quote: "Không bao giờ bỏ cuộc.", img: "https://i.pravatar.cc/300?img=11" },
-  { id: 7, name: "Đỗ Hải", nickname: "Hải Lác", role: "HS", hobby: "Code", message: "Cố lên anh em!", quote: "Tương lai tươi sáng.", img: "https://i.pravatar.cc/300?img=15" },
-  { id: 8, name: "Bảo Thy", nickname: "Thy Thy", role: "HS", hobby: "TikTok", message: "Nhớ mọi người.", quote: "Mãi yêu 12A1.", img: "https://i.pravatar.cc/300?img=20" },
-  { id: 9, name: "An Bình", nickname: "Bình An", role: "HS", hobby: "Ngủ", message: "Đừng quên tớ.", quote: "Bình yên là nhất.", img: "https://i.pravatar.cc/300?img=24" },
-  { id: 10, name: "Linh Hà", nickname: "Hà Mã", role: "HS", hobby: "Ăn vặt", message: "Kỷ niệm xưa.", quote: "Ăn để sống.", img: "https://i.pravatar.cc/300?img=28" },
-  { id: 11, name: "Minh Bảo", nickname: "Bảo Bảo", role: "HS", hobby: "Chơi game", message: "Thành công!", quote: "Try hard.", img: "https://i.pravatar.cc/300?img=33" },
-  { id: 12, name: "Tuấn Kiệt", nickname: "Kiệt Lặc", role: "HS", hobby: "Bóng rổ", message: "Giữ liên lạc nhé.", quote: "Cháy hết mình.", img: "https://i.pravatar.cc/300?img=12" },
-  { id: 13, name: "Thanh Thái", nickname: "Thái Tử", role: "HS", hobby: "Đọc sách", message: "Hẹn ngày hội ngộ.", quote: "Trí tuệ là sức mạnh.", img: "https://i.pravatar.cc/300?img=13" },
-  { id: 14, name: "Gia Huy", nickname: "Huy Còi", role: "HS", hobby: "Đá banh", message: "Mãi đỉnh!", quote: "Làm tới bến.", img: "https://i.pravatar.cc/300?img=14" },
-  { id: 15, name: "Hồng Dung", nickname: "Dung Dăng", role: "HS", hobby: "Hát hò", message: "Nhớ lớp mình.", quote: "Hát hay không bằng hay hát.", img: "https://i.pravatar.cc/300?img=16" },
-  { id: 16, name: "Ngọc Tuấn", nickname: "Tuấn Tú", role: "HS", hobby: "Lướt web", message: "Chúc may mắn.", quote: "Cứ đi rồi sẽ đến.", img: "https://i.pravatar.cc/300?img=17" },
-  { id: 17, name: "Quốc Bảo", nickname: "Bảo Bối", role: "HS", hobby: "Xem phim", message: "Gặp lại sau.", quote: "Sống là cho đâu chỉ nhận.", img: "https://i.pravatar.cc/300?img=18" },
-  { id: 18, name: "Minh Tuấn", nickname: "Tuấn Khỉ", role: "HS", hobby: "Chạy bộ", message: "Phải giàu nhé.", quote: "Sức khỏe là vàng.", img: "https://i.pravatar.cc/300?img=19" },
-  { id: 19, name: "Quỳnh Như", nickname: "Như Mèo", role: "HS", hobby: "Trà sữa", message: "Không quên ai đâu.", quote: "Ngọt ngào đến mấy cũng tan thành mây.", img: "https://i.pravatar.cc/300?img=21" },
-  { id: 20, name: "Đức Anh", nickname: "Anh Chàng", role: "HS", hobby: "Công nghệ", message: "Đỉnh của chóp.", quote: "Công nghệ thay đổi thế giới.", img: "https://i.pravatar.cc/300?img=22" },
-  { id: 21, name: "Hải Yến", nickname: "Yến Nhỏ", role: "HS", hobby: "Viết lách", message: "Lưu giữ thanh xuân.", quote: "Ngòi bút làm nên lịch sử.", img: "https://i.pravatar.cc/300?img=23" },
-  { id: 22, name: "Tuấn Anh", nickname: "Anh Tuấn", role: "HS", hobby: "Guitar", message: "Đánh đàn cho nhau nghe.", quote: "Âm nhạc là cuộc sống.", img: "https://i.pravatar.cc/300?img=25" },
-  { id: 23, name: "Ngọc Hân", nickname: "Hân Hoan", role: "HS", hobby: "K-pop", message: "Đu idol vui vẻ.", quote: "Fangirl chân chính.", img: "https://i.pravatar.cc/300?img=26" },
-  { id: 24, name: "Minh Tiến", nickname: "Tiến Lên", role: "HS", hobby: "Rubik", message: "Phá đảo mọi game.", quote: "Suy luận logic.", img: "https://i.pravatar.cc/300?img=27" },
-  { id: 25, name: "Phương Linh", nickname: "Linh Tinh", role: "HS", hobby: "Mua sắm", message: "Bảo trọng nha.", quote: "Thích là nhích.", img: "https://i.pravatar.cc/300?img=29" },
-  { id: 26, name: "Thành Đạt", nickname: "Đạt Chỉ Tiêu", role: "HS", hobby: "Kinh doanh", message: "Đại gia tương lai.", quote: "Tiền không là tất cả, nhưng không có tiền vất vả.", img: "https://i.pravatar.cc/300?img=30" },
-  { id: 27, name: "Bảo Trân", nickname: "Trân Châu", role: "HS", hobby: "Nấu ăn", message: "Nhớ ăn uống đầy đủ.", quote: "Con đường ngắn nhất đến trái tim là dạ dày.", img: "https://i.pravatar.cc/300?img=31" },
-  { id: 28, name: "Hoàng Long", nickname: "Long Mập", role: "HS", hobby: "Ngủ nướng", message: "Dậy sớm để thành công.", quote: "Ngủ là đam mê.", img: "https://i.pravatar.cc/300?img=32" },
-  { id: 29, name: "Kim Ngọc", nickname: "Ngọc Ngà", role: "HS", hobby: "Làm đẹp", message: "Xinh đẹp lên nhé.", quote: "Không có phụ nữ xấu.", img: "https://i.pravatar.cc/300?img=34" },
-  { id: 30, name: "Đăng Khôi", nickname: "Khôi Ngô", role: "HS", hobby: "Cầu lông", message: "Giữ sức khỏe.", quote: "Thể thao là trên hết.", img: "https://i.pravatar.cc/300?img=35" },
-  { id: 31, name: "Mai Trang", nickname: "Trang Tròn", role: "HS", hobby: "Đọc truyện", message: "Mãi yêu.", quote: "Cuộc sống là một cuốn sách.", img: "https://i.pravatar.cc/300?img=36" },
-  { id: 32, name: "Nhật Nam", nickname: "Nam Cường", role: "HS", hobby: "Bơi lội", message: "Vượt qua thử thách.", quote: "Cố gắng hết sức.", img: "https://i.pravatar.cc/300?img=37" },
-  { id: 33, name: "Thúy Kiều", nickname: "Kiều Nữ", role: "HS", hobby: "Cắm hoa", message: "Nhẹ nhàng trôi.", quote: "Bình yên vô sự.", img: "https://i.pravatar.cc/300?img=38" },
-  { id: 34, name: "Trọng Hiếu", nickname: "Hiếu Động", role: "HS", hobby: "Võ thuật", message: "Mạnh mẽ lên.", quote: "Tự vệ bản thân.", img: "https://i.pravatar.cc/300?img=39" },
-  { id: 35, name: "Diệu Nhi", nickname: "Nhi Nhí", role: "HS", hobby: "Chụp ảnh", message: "Giữ khung hình.", quote: "Kỷ niệm không phai.", img: "https://i.pravatar.cc/300?img=40" },
-  { id: 36, name: "Xuân Bách", nickname: "Bách Thú", role: "HS", hobby: "Cờ vua", message: "Hẹn đấu một ván.", quote: "Chiếu tướng.", img: "https://i.pravatar.cc/300?img=41" },
-  { id: 37, name: "Khánh Vy", nickname: "Vy Béo", role: "HS", hobby: "Tiếng Anh", message: "Go global!", quote: "Never give up.", img: "https://i.pravatar.cc/300?img=42" },
-];
-
-const INITIAL_MEMBERS_STATE = MEMBERS.map(m => ({
-  ...m,
-  email: `${m.nickname.toLowerCase().replace(/[\sđ]/g, 'd').normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '')}@class.com`,
-  privateMessages: [
-    { id: 1, text: "Cố gắng lên nhé, tương lai rực rỡ đang chờ!", author: "Ẩn danh", date: "20/05/2026" }
-  ],
-  hasNewMessage: false
-}));
-
-const INITIAL_GALLERY = [
-  { id: 1, url: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800", reactions: { like: 12, love: 5, haha: 0, wow: 1, sad: 0 } },
-  { id: 2, url: "https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=800", reactions: { like: 34, love: 12, haha: 5, wow: 0, sad: 0 } },
-  { id: 3, url: "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800", reactions: { like: 56, love: 23, haha: 2, wow: 10, sad: 0 } },
-  { id: 4, url: "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800", reactions: { like: 8, love: 2, haha: 1, wow: 0, sad: 0 } },
-  { id: 5, url: "https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=800", reactions: { like: 45, love: 30, haha: 12, wow: 5, sad: 1 } },
-  { id: 6, url: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800", reactions: { like: 21, love: 8, haha: 0, wow: 2, sad: 0 } },
-  { id: 7, url: "https://images.unsplash.com/photo-1509062522246-3755977927d7?w=800", reactions: { like: 77, love: 45, haha: 10, wow: 20, sad: 2 } },
-  { id: 8, url: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800", reactions: { like: 15, love: 6, haha: 3, wow: 1, sad: 0 } },
-  { id: 9, url: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800", reactions: { like: 62, love: 25, haha: 8, wow: 4, sad: 0 } },
-  { id: 10, url: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=800", reactions: { like: 33, love: 18, haha: 4, wow: 2, sad: 0 } },
-  { id: 11, url: "https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?w=800", reactions: { like: 41, love: 22, haha: 6, wow: 3, sad: 0 } },
-  { id: 12, url: "https://images.unsplash.com/photo-1516321497487-e288fb19713f?w=800", reactions: { like: 28, love: 14, haha: 2, wow: 1, sad: 0 } },
-  { id: 13, url: "https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?w=800", reactions: { like: 55, love: 35, haha: 15, wow: 8, sad: 1 } },
-  { id: 14, url: "https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?w=800", reactions: { like: 19, love: 9, haha: 1, wow: 0, sad: 0 } },
-  { id: 15, url: "https://images.unsplash.com/photo-1519452635265-7b1fbfd1e4e0?w=800", reactions: { like: 88, love: 50, haha: 20, wow: 15, sad: 3 } },
-  { id: 16, url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800", reactions: { like: 102, love: 40, haha: 5, wow: 12, sad: 0 } }
-];
-
-const INITIAL_GUESTBOOK = [
-  { id: 1, author: "An Bình", text: "Chúc cả lớp thi tốt nhé! Đỗ nguyện vọng 1 hết nha!", date: "15/05/2025", color: "bg-pink-100", rotate: "-2deg" },
-  { id: 2, author: "Minh Bảo", text: "Mãi nhớ những ngày đi học muộn, ăn vụng trong lớp bị thầy bắt.", date: "16/05/2025", color: "bg-blue-100", rotate: "3deg" },
-  { id: 3, author: "Linh Hà", text: "Thanh xuân có các bạn là điều tuyệt vời nhất. Cảm ơn vì đã ở đây.", date: "18/05/2025", color: "bg-orange-100", rotate: "-1deg" },
-  { id: 4, author: "Thanh Bình", text: "Mong rằng mọi người sẽ có được thành công của riêng mình.", date: "20/05/2025", color: "bg-green-100", rotate: "2deg" },
-];
-
-const TIMELINE = [
-  { date: "Tháng 8, 2024", title: "Ngày Tựu Trường", desc: "Gặp lại bạn bè sau kỳ nghỉ hè, những câu chuyện chưa kể và tiếng cười rộn ràng khắp sân trường." },
-  { date: "Tháng 9, 2024", title: "Ngày Khai Giảng", desc: "Bắt đầu hành trình cuối cùng dưới mái trường, nghe tiếng trống trường bồi hồi." },
-  { date: "Tháng 10, 2024", title: "Hoạt Động Ngoại Khóa", desc: "Những buổi học ngoài trời đầy mới mẻ, gắn kết và tràn ngập tiếng cười của tập thể." },
-  { date: "Tháng 11, 2024", title: "Tri Ân Thầy Cô 20/11", desc: "Những đóa hoa thay lời muốn nói gửi đến những người lái đò thầm lặng." },
-  { date: "Tháng 12, 2024", title: "Giáng Sinh Ấm Áp", desc: "Lớp học rực rỡ sắc màu, cùng nhau trao những món quà nhỏ và lời chúc an lành." },
-  { date: "Tháng 1, 2025", title: "Ôn Thi Học Kỳ I", desc: "Những ngày mài đũng quần trên ghế nhà trường, cùng nhau cố gắng vì bảng điểm đẹp." },
-  { date: "Tháng 3, 2025", title: "Ngày 8/3", desc: "Những món quà bất ngờ dành tặng một nửa đáng yêu của lớp." },
-  { date: "Tháng 5, 2025", title: "Lễ Tổng Kết & Chụp Kỷ Yếu", desc: "Giọt nước mắt chia xa, những chiếc ôm thật chặt và bộ ảnh lưu giữ thanh xuân." },
-];
-
-const PLAYLIST = [
-  { id: 1, title: "Tháng Năm Không Quên", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200" },
-  { id: 2, title: "Năm Tháng Trôi Qua", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", cover: "https://images.unsplash.com/photo-1493225457124-a1a2a5956093?w=200" },
-  { id: 3, title: "Nhớ Mãi Chuyến Đi Này", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", cover: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=200" },
-  { id: 4, title: "Không Yêu Cũng Chẳng Cô Đơn", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3", cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200" },
-];
-
-// --- COMPONENTS ---
-
-const QuizGate = ({ onAccess }) => {
-  const [quizState, setQuizState] = useState('question'); 
-
-  const handleAnswer = (opt) => {
-    if (opt === "Boss") {
-      const correctSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3');
-      correctSound.play().catch(e => console.log(e));
-      setQuizState('correct');
-      setTimeout(() => onAccess(), 2000);
-    } else {
-      const wrongSound = new Audio('https://assets.mixkit.co/active_storage/sfx/3112/3112-preview.mp3');
-      wrongSound.play().catch(e => console.log(e));
-      setQuizState('wrong');
-      setTimeout(() => setQuizState('question'), 2500);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-md"></div>
-      
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden z-10 transition-all duration-300">
-        <AnimatePresence mode="wait">
-          {quizState === 'question' && (
-            <motion.div key="question" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-              <div className="mb-6 flex justify-center border-4 border-gray-100 rounded-2xl shadow-sm p-1 bg-white rotate-2">
-                <img src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600" alt="Class" className="rounded-xl w-full h-44 object-cover" />
-              </div>
-              <h2 className="text-xl font-bold text-center mb-6 text-gray-800">Biệt danh của lớp trưởng là gì?</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {["A. Đại Ca", "B. Bé Điệu", "C. Sư Tử", "D. Boss"].map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => handleAnswer(opt.split(". ")[1])}
-                    className="py-4 px-4 rounded-xl border border-gray-200 text-center font-medium hover:bg-gray-50 active:scale-95 transition-all text-gray-600"
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {quizState === 'wrong' && (
-            <motion.div key="wrong" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="p-8 text-center flex flex-col items-center justify-center min-h-[350px]">
-              <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                <span className="text-5xl">😿</span>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Bạn không phải là thành viên của lớp này</h2>
-              <div className="absolute bottom-0 left-0 w-full h-3 bg-red-400"></div>
-            </motion.div>
-          )}
-          
-          {quizState === 'correct' && (
-            <motion.div key="correct" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="p-8 text-center flex flex-col items-center justify-center min-h-[350px]">
-              <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                <span className="text-5xl">😻</span>
-              </div>
-              <h2 className="text-xl font-bold text-gray-800 mb-2">Chào mừng trở lại!</h2>
-              <div className="absolute bottom-0 left-0 w-full h-3 bg-green-400"></div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-};
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [isAccessed, setIsAccessed] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [showMusicModal, setShowMusicModal] = useState(false);
-  const [memberModal, setMemberModal] = useState(null);
-  const [galleryModal, setGalleryModal] = useState(null);
-  const [showGuestbookForm, setShowGuestbookForm] = useState(false);
-  const [newNoteData, setNewNoteData] = useState({ author: '', text: '' });
-  
-  // Dữ liệu chính được đồng bộ với Firebase
-  const [membersData, setMembersData] = useState(INITIAL_MEMBERS_STATE);
-  const [guestbook, setGuestbook] = useState(INITIAL_GUESTBOOK);
-  const [galleryItems, setGalleryItems] = useState(INITIAL_GALLERY);
-
-  const [memberModalTab, setMemberModalTab] = useState('info'); 
-  const [authEmail, setAuthEmail] = useState('');
-  const [authError, setAuthError] = useState(false);
-  const [globalPmDraft, setGlobalPmDraft] = useState({ recipientId: '', text: '', author: '', isAnonymous: false });
-  const [showPmSuccess, setShowPmSuccess] = useState(false);
-
-  const [visibleStudents, setVisibleStudents] = useState(6);
-  const [visibleTimeline, setVisibleTimeline] = useState(4);
-
-  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef(null);
-
-  // Khởi tạo Auth cho Firebase (Mới)
-  useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Lỗi xác thực:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  // Lắng nghe dữ liệu thời gian thực từ Firestore (Mới)
-  useEffect(() => {
-    if (!user || !db) return;
-
-    // Đồng bộ Guestbook
-    const unsubGuestbook = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'guestbook'), (snapshot) => {
-      const fbNotes = snapshot.docs.map(doc => doc.data());
-      const allNotes = [...fbNotes, ...INITIAL_GUESTBOOK];
-      const uniqueNotes = Array.from(new Map(allNotes.map(item => [item.id, item])).values());
-      setGuestbook(uniqueNotes.sort((a,b) => b.id - a.id));
-    }, console.error);
-
-    // Đồng bộ Members (Thông tin, tin nhắn kín, chấm đỏ)
-    const unsubMembers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'members'), (snapshot) => {
-      const fbMembers = snapshot.docs.map(doc => doc.data());
-      const merged = INITIAL_MEMBERS_STATE.map(initM => {
-        const fbM = fbMembers.find(m => m.id === initM.id);
-        return fbM ? fbM : initM;
-      });
-      setMembersData(merged);
-    }, console.error);
-
-    // Đồng bộ Gallery (React thả tim)
-    const unsubGallery = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'gallery'), (snapshot) => {
-      const fbGallery = snapshot.docs.map(doc => doc.data());
-      const merged = INITIAL_GALLERY.map(initG => {
-        const fbG = fbGallery.find(g => g.id === initG.id);
-        return fbG ? fbG : initG;
-      });
-      setGalleryItems(merged);
-    }, console.error);
-
-    return () => {
-      unsubGuestbook();
-      unsubMembers();
-      unsubGallery();
-    };
-  }, [user]);
-
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const handleAccessSuccess = () => {
-    setIsAccessed(true);
-    setIsPlaying(true); 
-  };
-
-  const togglePlay = () => {
-    if (isPlaying) { audioRef.current.pause(); } else { audioRef.current.play().catch(e => console.log(e)); }
-    setIsPlaying(!isPlaying);
-  };
-
-  const nextTrack = () => { setCurrentTrackIndex((prev) => (prev + 1) % PLAYLIST.length); setIsPlaying(true); };
-  const prevTrack = () => { setCurrentTrackIndex((prev) => (prev - 1 + PLAYLIST.length) % PLAYLIST.length); setIsPlaying(true); };
-
-  useEffect(() => {
-    if (audioRef.current && isPlaying) {
-      audioRef.current.play().catch(() => setIsPlaying(false));
-    }
-  }, [currentTrackIndex, isPlaying]);
-
-  const scrollTo = (id) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Đăng lưu bút và lưu lên Cloud
-  const submitGuestbookNote = async (e) => {
-    e.preventDefault();
-    if (!newNoteData.text.trim()) return;
-
-    const colors = ['bg-pink-100', 'bg-blue-100', 'bg-yellow-100', 'bg-green-100', 'bg-purple-100'];
-    const newNote = {
-      id: Date.now(),
-      author: newNoteData.author.trim() || "Giấu tên",
-      text: newNoteData.text,
-      date: new Date().toLocaleDateString('vi-VN'),
-      color: colors[Math.floor(Math.random() * colors.length)],
-      rotate: `${Math.floor(Math.random() * 6) - 3}deg`
-    };
-
-    // Cập nhật giao diện tạm thời
-    setGuestbook([newNote, ...guestbook]);
-    setShowGuestbookForm(false);
-    setNewNoteData({ author: '', text: '' });
-
-    // Lưu vào Firestore
-    if (db && user) {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'guestbook', newNote.id.toString()), newNote);
-    }
-  };
-
-  // Gửi Tâm Tư Riêng và lưu lên Cloud
-  const handleSendGlobalPM = async (e) => {
-    e.preventDefault();
-    if (!globalPmDraft.text.trim() || !globalPmDraft.recipientId) return;
-
-    const recipientId = parseInt(globalPmDraft.recipientId);
-    const targetMember = membersData.find(m => m.id === recipientId);
-    if (!targetMember) return;
-
-    const updatedMember = {
-      ...targetMember,
-      hasNewMessage: true,
-      privateMessages: [
-        {
-          id: Date.now(),
-          text: globalPmDraft.text,
-          author: globalPmDraft.isAnonymous ? 'Ẩn danh' : (globalPmDraft.author.trim() || 'Ẩn danh'),
-          date: new Date().toLocaleDateString('vi-VN')
-        },
-        ...targetMember.privateMessages
-      ]
-    };
-
-    // Cập nhật giao diện
-    const newMembersData = membersData.map(m => m.id === recipientId ? updatedMember : m);
-    setMembersData(newMembersData);
-    setGlobalPmDraft({ recipientId: '', text: '', author: '', isAnonymous: false });
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kỷ Niệm 12A1</title>
     
-    setShowPmSuccess(true);
-    setTimeout(() => setShowPmSuccess(false), 3000);
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-    // Lưu vào Firestore
-    if (db && user) {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members', updatedMember.id.toString()), updatedMember);
-    }
-  };
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
-  const currentMember = memberModal ? membersData.find(m => m.id === memberModal.id) : null;
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pattaya&family=Quicksand:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Quicksand', sans-serif; background: #fff5f7; margin: 0; }
+        .font-pattaya { font-family: 'Pattaya', sans-serif; }
+        .gallery-scroll::-webkit-scrollbar { width: 4px; }
+        .gallery-scroll::-webkit-scrollbar-thumb { background: #ec4899; border-radius: 10px; }
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 8s linear infinite; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-  const closeMemberModal = () => {
-    setMemberModal(null);
-    setTimeout(() => {
-        setMemberModalTab('info');
-        setAuthEmail('');
-        setAuthError(false);
-    }, 300);
-  };
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { motion, AnimatePresence } = FramerMotion;
 
-  // Mở hòm thư và lưu trạng thái "đã đọc" lên Cloud
-  const handleAuthPM = async (e) => {
-    e.preventDefault();
-    if (authEmail.trim().toLowerCase() === currentMember.email) {
-      setMemberModalTab('read');
-      setAuthError(false);
-      
-      // Tắt chấm đỏ và cập nhật Cloud
-      if (currentMember.hasNewMessage) {
-         const updatedMember = { ...currentMember, hasNewMessage: false };
-         setMembersData(prevData => prevData.map(m => m.id === currentMember.id ? updatedMember : m));
-         
-         if (db && user) {
-           await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'members', updatedMember.id.toString()), updatedMember);
-         }
-      }
-    } else {
-      setAuthError(true);
-    }
-  };
+        // --- KHỞI TẠO FIREBASE ---
+        let db;
+        try {
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            if (firebaseConfig) {
+                const app = firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore(app);
+            }
+        } catch (e) { console.error("Lỗi Firebase:", e); }
 
-  // React ảnh và lưu lên Cloud
-  const handleReaction = async (index, type) => {
-    const targetGallery = galleryItems[index];
-    const updatedGallery = {
-      ...targetGallery,
-      reactions: {
-        ...targetGallery.reactions,
-        [type]: targetGallery.reactions[type] + 1
-      }
-    };
+        // Thành phần hiển thị Icon Lucide
+        const Icon = ({ name, size = 24, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} style={{width: size, height: size}} className={`inline-block ${className}`}></i>;
+        };
 
-    // Cập nhật UI
-    const newGallery = [...galleryItems];
-    newGallery[index] = updatedGallery;
-    setGalleryItems(newGallery);
+        // --- DỮ LIỆU GỐC CỦA BẠN (Dán mảng đầy đủ của bạn vào đây) ---
+        const MEMBERS = [
+            { id: 1, name: "Cô Ngọc Lan", nickname: "Me Lan", role: "GVCN", hobby: "Dạy Văn, Trồng hoa", message: "Chúc các con luôn vững bước trên đường đời", img: "https://images.unsplash.com/photo-1573496359142-b8d7734a5a27?w=400" },
+            { id: 2, name: "Thầy Quốc Bảo", nickname: "Bố Bảo", role: "GVCN", hobby: "Toán học, Đá bóng", message: "Hãy tự tin vào chính mình các em nhé", img: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400" }
+            // Thêm các thành viên khác...
+        ];
 
-    // Cập nhật Firestore
-    if (db && user) {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'gallery', updatedGallery.id.toString()), updatedGallery);
-    }
-  };
+        const PLAYLIST = [
+            { id: 1, title: "Tháng Năm Không Quên", cover: "https://images.unsplash.com/photo-1459749411177-0421800673d6?w=400" }
+        ];
 
-  const teachers = membersData.filter(m => m.role === 'GVCN');
-  const students = membersData.filter(m => m.role === 'HS');
+        function App() {
+            const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [selectedMember, setSelectedMember] = useState(null);
 
-  return (
-    <div className="font-sans text-gray-800 bg-white min-h-screen">
-      <style>{globalStyles}</style>
-      
-      <audio ref={audioRef} src={PLAYLIST[currentTrackIndex].url} onEnded={nextTrack} />
-
-      {!isAccessed && <QuizGate onAccess={handleAccessSuccess} />}
-
-      <header className={`fixed top-0 w-full z-40 transition-all duration-300 ${isScrolled ? 'bg-white/40 backdrop-blur-lg shadow-sm border-b border-white/20' : 'bg-transparent'}`}>
-        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className={`font-cursive text-4xl font-bold cursor-pointer transition-colors ${isScrolled ? 'text-gray-900' : 'text-white'}`} onClick={() => scrollTo('home')}>
-            ThanhXuân
-          </div>
-          <nav className={`hidden md:flex gap-8 text-[15px] font-semibold transition-colors ${isScrolled ? 'text-gray-700' : 'text-white/90'}`}>
-            <button onClick={() => scrollTo('home')} className="hover:text-pink-400 transition">Trang chủ</button>
-            <button onClick={() => scrollTo('members')} className="hover:text-pink-400 transition">Thành viên</button>
-            <button onClick={() => scrollTo('gallery')} className="hover:text-pink-400 transition">Khoảnh khắc</button>
-            <button onClick={() => scrollTo('timeline')} className="hover:text-pink-400 transition">Dòng thời gian</button>
-            <button onClick={() => scrollTo('guestbook')} className="hover:text-pink-400 transition">Lưu bút</button>
-            <button onClick={() => scrollTo('private-messages')} className="hover:text-pink-400 transition">Tâm tư</button>
-            <button onClick={() => setShowMusicModal(true)} className="hover:text-pink-400 transition">Nhạc</button>
-          </nav>
-        </div>
-      </header>
-
-      {/* Hero Section */}
-      <section id="home" className="relative h-screen w-full flex flex-col items-center justify-center overflow-hidden bg-black text-center">
-        <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=1600" 
-            alt="Class Background" 
-            className="w-full h-full object-cover animate-zoom brightness-[0.55]" 
-          />
-        </div>
-        
-        <div className="relative z-10 w-full px-4 flex flex-col items-center">
-          <h1 
-            className="font-cursive text-6xl md:text-[7.5rem] text-white tracking-wide mb-6 leading-tight"
-            style={{ textShadow: "0px 10px 20px rgba(0,0,0,0.8), 0px 0px 5px rgba(0,0,0,0.5)" }}
-          >
-            Thanh Xuân <br className="md:hidden" /> Của Chúng Ta
-          </h1>
-          <p className="text-white/90 italic mb-12 text-lg md:text-2xl font-medium drop-shadow-lg">
-            "Những năm tháng rực rỡ dưới mái trường thân yêu"
-          </p>
-          
-          <button 
-            onClick={() => scrollTo('members')}
-            className="bg-blue-300 text-blue-950 px-10 py-4 rounded-full font-bold shadow-[0_8px_30px_rgb(0,0,0,0.4)] hover:bg-blue-400 hover:text-white transition-all text-lg"
-          >
-            Khám phá kỷ niệm
-          </button>
-        </div>
-
-        <div className="absolute bottom-8 flex flex-col items-center text-white/70 z-10">
-          <span className="text-xs font-bold tracking-widest uppercase mb-2">Scroll</span>
-          <ChevronDown size={24} className="animate-bounce" />
-        </div>
-      </section>
-
-      {/* Members Section */}
-      <section id="members" className="py-24 px-4 max-w-6xl mx-auto">
-        <div className="flex flex-col items-center mb-16">
-          <h2 className="font-cursive text-5xl md:text-6xl text-gray-900 mb-4">Thành Viên</h2>
-          <div className="w-32 h-1 bg-pink-400 rounded-full shadow-sm"></div>
-        </div>
-        
-        {/* Hàng riêng cho GVCN */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 max-w-3xl mx-auto mb-16">
-          {teachers.map(member => (
-            <div 
-              key={member.id} 
-              className="group cursor-pointer flex flex-col relative"
-              onClick={() => setMemberModal(member)}
-            >
-              <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold z-10 shadow-lg uppercase tracking-wider">
-                Giáo Viên Chủ Nhiệm
-              </div>
-
-              {member.hasNewMessage && (
-                <div className="absolute top-[-4px] right-[-4px] w-4 h-4 bg-red-500 rounded-full border-2 border-white z-20 animate-pulse shadow-sm" title="Có tâm tư mới!"></div>
-              )}
-
-              <div className="relative rounded-[2rem] overflow-hidden shadow-md aspect-[4/5] bg-gray-100 w-full border border-gray-100">
-                <img 
-                  src={member.img} 
-                  alt={member.name} 
-                  className="w-full h-full object-cover transition-all duration-500 group-hover:blur-[2px] group-hover:scale-105" 
-                />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-6 text-center">
-                  <p className="text-white font-cursive text-3xl mb-4 italic drop-shadow-md">"{member.quote}"</p>
-                  <div className="w-12 h-[1px] bg-white/50 mb-5"></div>
-                  <span className="bg-transparent text-white px-6 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 border border-white hover:bg-white/20 transition-colors">
-                    Xem chi tiết <ChevronRight size={16} />
-                  </span>
-                </div>
-              </div>
-              
-              <div className="text-center mt-5 relative h-8 overflow-hidden">
-                <h3 className="font-bold text-2xl text-gray-900 absolute inset-0 w-full transition-transform duration-300 group-hover:-translate-y-full">
-                  {member.name}
-                </h3>
-                <h3 className="font-bold text-2xl text-pink-500 absolute inset-0 w-full transition-transform duration-300 translate-y-full group-hover:translate-y-0">
-                  {member.nickname}
-                </h3>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Hàng cho Học sinh */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-          {students.slice(0, visibleStudents).map(member => (
-            <div 
-              key={member.id} 
-              className="group cursor-pointer flex flex-col relative"
-              onClick={() => setMemberModal(member)}
-            >
-              {member.hasNewMessage && (
-                <div className="absolute top-[-4px] right-[-4px] w-4 h-4 bg-red-500 rounded-full border-2 border-white z-20 animate-pulse shadow-sm" title="Có tâm tư mới!"></div>
-              )}
-
-              <div className="relative rounded-[2rem] overflow-hidden shadow-md aspect-[4/5] bg-gray-100 w-full border border-gray-100">
-                <img 
-                  src={member.img} 
-                  alt={member.name} 
-                  className="w-full h-full object-cover transition-all duration-500 group-hover:blur-[2px] group-hover:scale-105" 
-                />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center p-6 text-center">
-                  <p className="text-white font-cursive text-3xl mb-4 italic drop-shadow-md">"{member.quote}"</p>
-                  <div className="w-12 h-[1px] bg-white/50 mb-5"></div>
-                  <span className="bg-transparent text-white px-6 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 border border-white hover:bg-white/20 transition-colors">
-                    Xem chi tiết <ChevronRight size={16} />
-                  </span>
-                </div>
-              </div>
-              
-              <div className="text-center mt-5 relative h-8 overflow-hidden">
-                <h3 className="font-bold text-2xl text-gray-900 absolute inset-0 w-full transition-transform duration-300 group-hover:-translate-y-full">
-                  {member.name}
-                </h3>
-                <h3 className="font-bold text-2xl text-pink-500 absolute inset-0 w-full transition-transform duration-300 translate-y-full group-hover:translate-y-0">
-                  {member.nickname}
-                </h3>
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        <div className="text-center mt-12 flex justify-center gap-4">
-          {visibleStudents < students.length && (
-            <button onClick={() => setVisibleStudents(prev => Math.min(prev + 3, students.length))} className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-8 py-3 rounded-full font-semibold transition-colors flex items-center gap-2">
-              Xem thêm <ChevronDown size={18} />
-            </button>
-          )}
-          {visibleStudents > 6 && (
-            <button onClick={() => setVisibleStudents(6)} className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-8 py-3 rounded-full font-semibold transition-colors flex items-center gap-2">
-              Ẩn bớt <ChevronDown size={18} className="rotate-180" />
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Gallery Section */}
-      <section id="gallery" className="py-24 px-4 bg-gray-50 border-y border-gray-100">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col items-center mb-12">
-            <h2 className="font-cursive text-5xl md:text-6xl text-gray-900 mb-4">Khoảnh Khắc Đáng Nhớ</h2>
-            <div className="w-48 h-1 bg-pink-400 rounded-full shadow-sm"></div>
-          </div>
-          
-          <div className="gallery-scroll pr-4 pb-4">
-            <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-              {galleryItems.map((img, idx) => (
-                <div 
-                  key={img.id} 
-                  className="relative rounded-2xl overflow-hidden group cursor-pointer break-inside-avoid shadow-sm hover:shadow-lg transition-all"
-                  onClick={() => setGalleryModal(idx)}
-                >
-                  <img src={img.url} alt="Gallery" className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  
-                  <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-gray-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1 shadow-sm">
-                    👍 {img.reactions.like + img.reactions.love + img.reactions.haha + img.reactions.wow + img.reactions.sad}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Timeline Section */}
-      <section id="timeline" className="py-24 px-4 max-w-4xl mx-auto">
-        <div className="flex flex-col items-center mb-20">
-          <h2 className="font-cursive text-5xl md:text-6xl text-gray-900 mb-4">Dòng Thời Gian</h2>
-          <div className="w-40 h-1 bg-pink-400 rounded-full shadow-sm"></div>
-        </div>
-        <div className="relative">
-          <div className="absolute left-1/2 transform -translate-x-1/2 w-[2px] h-full bg-gray-200 border-l-2 border-dashed border-gray-300"></div>
-          
-          {TIMELINE.slice(0, visibleTimeline).map((item, idx) => {
-            const isLeft = idx % 2 === 0;
             return (
-              <div key={idx} className={`relative flex items-center justify-between mb-16 w-full ${isLeft ? 'flex-row-reverse' : ''} group`}>
-                <div className="w-5/12"></div>
-                <div className="absolute left-1/2 transform -translate-x-1/2 w-5 h-5 rounded-full bg-pink-500 border-4 border-white shadow-md z-10 group-hover:scale-125 transition-transform duration-300"></div>
-                <div className={`w-5/12 ${isLeft ? 'text-right pr-10' : 'text-left pl-10'}`}>
-                  <div className="bg-white p-6 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-50 group-hover:-translate-y-1 transition-transform duration-300">
-                    <span className="inline-block bg-pink-50 text-pink-600 text-xs font-bold px-3 py-1 rounded-full mb-3">{item.date}</span>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">{item.desc}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                <div className="min-h-screen pb-10">
+                    <header className="p-10 text-center">
+                        <motion.h1 initial={{y:-20}} animate={{y:0}} className="font-pattaya text-5xl md:text-7xl text-pink-500 mb-2">12A1 Kỷ Niệm</motion.h1>
+                        <p className="text-gray-500 italic font-medium">"Thanh xuân là một cơn mưa rào..."</p>
+                    </header>
 
-        <div className="text-center mt-12 flex justify-center gap-4 relative z-10">
-          {visibleTimeline < TIMELINE.length && (
-            <button onClick={() => setVisibleTimeline(prev => Math.min(prev + 3, TIMELINE.length))} className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-8 py-3 rounded-full font-semibold transition-colors flex items-center gap-2">
-              Xem thêm sự kiện <ChevronDown size={18} />
-            </button>
-          )}
-          {visibleTimeline > 4 && (
-            <button onClick={() => setVisibleTimeline(4)} className="bg-gray-100 text-gray-600 hover:bg-gray-200 px-8 py-3 rounded-full font-semibold transition-colors flex items-center gap-2">
-              Ẩn bớt <ChevronDown size={18} className="rotate-180" />
-            </button>
-          )}
-        </div>
-      </section>
+                    {/* Music Player */}
+                    <div className="max-w-md mx-auto mb-12 p-6 bg-white/80 backdrop-blur rounded-[32px] shadow-2xl flex items-center gap-5 border border-white">
+                        <img src={PLAYLIST[currentTrackIndex].cover} className={`w-20 h-20 rounded-2xl object-cover shadow-lg ${isPlaying ? 'animate-spin-slow' : ''}`} />
+                        <div className="flex-1 overflow-hidden">
+                            <h4 className="font-bold text-pink-600 truncate text-lg">{PLAYLIST[currentTrackIndex].title}</h4>
+                            <div className="flex gap-5 mt-2">
+                                <button onClick={() => setIsPlaying(!isPlaying)} className="hover:scale-110 transition">
+                                    <Icon name={isPlaying ? "pause" : "play"} className="text-pink-500" size={32} />
+                                </button>
+                                <button onClick={() => setCurrentTrackIndex((currentTrackIndex + 1) % PLAYLIST.length)} className="hover:scale-110 transition">
+                                    <Icon name="skip-forward" className="text-gray-400" size={32} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
-      {/* Guestbook Section */}
-      <section id="guestbook" className="py-24 px-4 max-w-6xl mx-auto bg-[#f8f9fa] rounded-[3rem] shadow-inner mb-20">
-        <div className="flex flex-col items-center mb-8">
-          <h2 className="font-cursive text-5xl md:text-6xl text-gray-900 mb-4">Những Lời Nhắn Nhủ</h2>
-          <div className="w-56 h-1 bg-pink-400 rounded-full shadow-sm"></div>
-        </div>
-        
-        <div className="flex justify-center mb-16">
-          <button onClick={() => setShowGuestbookForm(true)} className="bg-gray-900 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
-            <Edit3 size={18} /> Tạo lưu bút mới
-          </button>
-        </div>
+                    {/* Member List */}
+                    <div className="max-w-6xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-6">
+                        {MEMBERS.map((m, idx) => (
+                            <motion.div 
+                                key={m.id}
+                                whileHover={{ scale: 1.03, rotate: 1 }}
+                                onClick={() => setSelectedMember(m)}
+                                className="bg-white rounded-3xl overflow-hidden shadow-md cursor-pointer border border-pink-50 p-2"
+                            >
+                                <img src={m.img} className="w-full h-48 object-cover rounded-2xl" />
+                                <div className="p-3 text-center">
+                                    <h3 className="font-bold text-gray-800 text-lg">{m.name}</h3>
+                                    <span className="text-xs bg-pink-100 text-pink-500 px-2 py-0.5 rounded-full font-semibold">{m.role}</span>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
 
-        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-6 space-y-6 px-4">
-          {guestbook.map((note) => (
-            <div key={note.id} className={`relative ${note.color} p-6 pt-10 pb-4 rounded-md shadow-md hover:shadow-xl transition-all duration-300 hover:scale-105 break-inside-avoid flex flex-col justify-between`} style={{ transform: `rotate(${note.rotate})` }}>
-              <div className="absolute top-[-12px] left-1/2 transform -translate-x-1/2 w-16 h-6 bg-white/40 backdrop-blur-sm shadow-sm rotate-2"></div>
-              <Pin size={18} className="absolute top-3 right-3 text-red-500/60 -rotate-45" />
-              <p className="text-gray-800 font-medium text-sm leading-relaxed mb-6 italic">"{note.text}"</p>
-              <div className="border-t border-black/10 pt-3 flex items-end justify-between mt-auto">
-                <p className="text-[10px] font-bold text-gray-500">{note.date}</p>
-                <p className="text-right text-sm font-bold text-gray-900">{note.author}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Private Messages Section */}
-      <section id="private-messages" className="py-24 px-4 max-w-4xl mx-auto mb-10">
-        <div className="flex flex-col items-center mb-12">
-          <h2 className="font-cursive text-5xl md:text-6xl text-gray-900 mb-4 text-center">Gửi Tâm Tư Riêng</h2>
-          <div className="w-48 h-1 bg-pink-400 rounded-full shadow-sm"></div>
-          <p className="text-gray-500 mt-4 text-center max-w-lg">Những lời thầm kín này sẽ được lưu trữ an toàn, chỉ người nhận có mật khẩu mới có thể mở ra xem.</p>
-        </div>
-
-        <div className="bg-white p-6 md:p-10 rounded-[2rem] shadow-xl border border-gray-100 relative">
-          <form onSubmit={handleSendGlobalPM} className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Gửi đến ai?</label>
-              <select value={globalPmDraft.recipientId} onChange={e => setGlobalPmDraft({...globalPmDraft, recipientId: e.target.value})} className="w-full px-5 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-400 transition bg-gray-50 text-gray-800" required>
-                <option value="" disabled>-- Chọn thành viên nhận thư --</option>
-                <optgroup label="Giáo Viên Chủ Nhiệm">{teachers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.nickname})</option>)}</optgroup>
-                <optgroup label="Học Sinh">{students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.nickname})</option>)}</optgroup>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Tên của bạn (Tùy chọn)</label>
-              <input type="text" value={globalPmDraft.author} onChange={e => setGlobalPmDraft({...globalPmDraft, author: e.target.value})} placeholder="Để trống nếu muốn ẩn danh..." disabled={globalPmDraft.isAnonymous} className="w-full px-5 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-400 transition bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Lời tâm tư (Bí mật)</label>
-              <textarea value={globalPmDraft.text} onChange={e => setGlobalPmDraft({...globalPmDraft, text: e.target.value})} placeholder="Viết vài lời nhắn nhủ thầm kín nhé..." className="w-full px-5 py-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-400 transition h-32 resize-none bg-gray-50" required></textarea>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input type="checkbox" id="anonymousCheck" checked={globalPmDraft.isAnonymous} onChange={e => setGlobalPmDraft({...globalPmDraft, isAnonymous: e.target.checked})} className="w-5 h-5 text-pink-500 rounded focus:ring-pink-400 cursor-pointer border-gray-300" />
-              <label htmlFor="anonymousCheck" className="text-sm font-bold text-gray-700 cursor-pointer select-none">Gửi ẩn danh (Người nhận sẽ không biết bạn là ai) 🤫</label>
-            </div>
-
-            <button type="submit" className="w-full bg-pink-500 text-white font-bold py-4 rounded-xl hover:bg-pink-600 transition shadow-lg active:scale-95 flex justify-center items-center gap-2 text-lg">
-              <Send size={20} /> Gửi Tâm Tư Lên Mây
-            </button>
-          </form>
-
-          <AnimatePresence>
-            {showPmSuccess && (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="absolute inset-0 bg-white/95 backdrop-blur-sm rounded-[2rem] flex flex-col justify-center items-center z-10">
-                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4 text-green-500"><ShieldCheck size={40} /></div>
-                <h3 className="text-3xl font-bold text-gray-800 mb-2 font-cursive">Đã gửi thành công!</h3>
-                <p className="text-gray-600 text-sm">Tâm tư của bạn đã được giấu kỹ vào hòm thư trên Cloud.</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="text-center py-12 bg-gray-900 text-gray-400 text-sm font-medium">
-        <p className="mb-2">© 2026 Thanh Xuân Của Chúng Ta</p>
-        <p className="text-xs opacity-60">Made with love for the memories</p>
-      </footer>
-
-      {/* --- MODALS --- */}
-      {/* Guestbook Form Modal */}
-      <AnimatePresence>
-        {showGuestbookForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 relative">
-              <button onClick={() => setShowGuestbookForm(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 transition"><X size={24} /></button>
-              <h3 className="font-cursive text-4xl text-gray-900 mb-6 text-center">Viết Lưu Bút</h3>
-              <form onSubmit={submitGuestbookNote} className="space-y-4">
-                <div><label className="block text-sm font-bold text-gray-700 mb-1">Tên của bạn</label><input type="text" value={newNoteData.author} onChange={(e) => setNewNoteData({...newNoteData, author: e.target.value})} placeholder="VD: Tuấn Kiệt" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-400 transition" maxLength={20} /></div>
-                <div><label className="block text-sm font-bold text-gray-700 mb-1">Lời nhắn gửi</label><textarea value={newNoteData.text} onChange={(e) => setNewNoteData({...newNoteData, text: e.target.value})} placeholder="Gửi gắm kỷ niệm vào đây nhé..." className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-pink-400 transition h-32 resize-none" required></textarea></div>
-                <button type="submit" className="w-full bg-pink-500 text-white font-bold py-3 rounded-xl hover:bg-pink-600 transition shadow-md active:scale-95">Dán lên tường</button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Member Detail Modal */}
-      <AnimatePresence>
-        {memberModal && currentMember && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-2xl overflow-hidden w-full max-w-sm shadow-2xl relative flex flex-col h-[32rem]">
-              <button onClick={closeMemberModal} className="absolute top-3 right-3 bg-black/30 text-white backdrop-blur p-2 rounded-full z-10 hover:bg-black/50 transition-colors"><X size={20} /></button>
-              <div className="h-48 shrink-0 relative">
-                <img src={currentMember.img} alt={currentMember.name} className="w-full h-full object-cover" />
-                <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 via-black/30 to-transparent p-5 text-white">
-                  <h3 className="text-3xl font-bold mb-1">{currentMember.name}</h3>
-                  <p className="text-pink-300 font-medium">{currentMember.nickname}</p>
-                </div>
-              </div>
-              <div className="p-5 overflow-y-auto custom-scroll flex-1">
-                <AnimatePresence mode="wait">
-                  {memberModalTab === 'info' && (
-                    <motion.div key="info" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-4">
-                      <div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Sở thích</p><p className="text-gray-800 font-medium bg-gray-50 p-3 rounded-lg border border-gray-100">{currentMember.hobby}</p></div>
-                      <div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Lời nhắn kỷ yếu</p><p className="text-gray-800 italic bg-pink-50/50 p-3 rounded-lg border border-pink-100 text-sm">"{currentMember.message}"</p></div>
-                      <div className="pt-2"><button onClick={() => setMemberModalTab('auth')} className="w-full bg-gray-900 text-white py-3 rounded-lg font-bold shadow-md hover:bg-gray-800 transition flex items-center justify-center gap-2 text-sm"><Lock size={16} /> Mở Hòm Thư Tâm Tư</button></div>
-                    </motion.div>
-                  )}
-                  {memberModalTab === 'auth' && (
-                    <motion.div key="auth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
-                      <div className="text-center mb-4 mt-2"><div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-2"><Lock size={24} className="text-pink-500"/></div><h4 className="font-bold text-lg text-gray-900">Hòm thư của {currentMember.nickname}</h4><p className="text-xs text-gray-500 mt-1">Chỉ chủ nhân mới có thể mở khóa hòm thư.</p></div>
-                      <form onSubmit={handleAuthPM} className="space-y-4">
-                        <div><input type="email" value={authEmail} onChange={e => {setAuthEmail(e.target.value); setAuthError(false);}} placeholder="Nhập Email để mở khóa..." className={`w-full p-3 rounded-lg border ${authError ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200'} focus:ring-2 focus:ring-pink-300 outline-none text-sm`} required />{authError && <p className="text-xs text-red-500 mt-1 font-medium">Email không chính xác!</p>}<p className="text-[11px] text-gray-400 mt-2 font-medium">Gợi ý pass: {currentMember.email}</p></div>
-                        <div className="flex gap-2 pt-2"><button type="button" onClick={() => setMemberModalTab('info')} className="px-4 py-2 bg-gray-100 rounded-lg font-semibold hover:bg-gray-200 transition text-sm">Hủy</button><button type="submit" className="flex-1 bg-gray-900 text-white rounded-lg font-bold hover:bg-gray-800 transition shadow-md text-sm flex items-center justify-center gap-2"><ShieldCheck size={16}/> Xác nhận</button></div>
-                      </form>
-                    </motion.div>
-                  )}
-                  {memberModalTab === 'read' && (
-                    <motion.div key="read" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 flex flex-col h-full">
-                      <div className="flex items-center justify-between border-b pb-2 shrink-0"><h4 className="font-bold text-lg text-gray-900 flex items-center gap-2"><Lock size={18} className="text-green-500"/> Tâm tư đã nhận</h4><button onClick={() => setMemberModalTab('info')} className="text-xs font-semibold text-gray-500 hover:text-gray-900 px-3 py-1.5 bg-gray-100 rounded-md">Đóng</button></div>
-                      <div className="space-y-3">
-                        {currentMember.privateMessages.length === 0 ? (
-                          <div className="text-center py-8 text-gray-400"><MessageCircle size={32} className="mx-auto mb-2 opacity-50" /><p className="text-sm">Chưa có tâm tư nào được gửi tới đây.</p></div>
-                        ) : (
-                          currentMember.privateMessages.map(pm => (
-                            <div key={pm.id} className="bg-pink-50 p-4 rounded-xl border border-pink-100 relative"><p className="text-sm text-gray-800 mb-3 leading-relaxed">"{pm.text}"</p><div className="flex justify-between items-center text-[11px] text-gray-500 font-bold border-t border-pink-200/50 pt-2"><span className="flex items-center gap-1"><User size={12}/> {pm.author}</span><span>{pm.date}</span></div></div>
-                          ))
+                    {/* Popup Chi Tiết */}
+                    <AnimatePresence>
+                        {selectedMember && (
+                            <motion.div 
+                                initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+                                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+                                onClick={() => setSelectedMember(null)}
+                            >
+                                <motion.div 
+                                    initial={{scale:0.8, y:20}} animate={{scale:1, y:0}}
+                                    className="bg-white rounded-[40px] p-8 max-w-sm w-full text-center relative shadow-2xl border-t-8 border-pink-400"
+                                    onClick={e => e.stopPropagation()}
+                                >
+                                    <img src={selectedMember.img} className="w-32 h-32 rounded-3xl mx-auto mb-4 border-4 border-white shadow-xl object-cover" />
+                                    <h2 className="text-2xl font-bold text-gray-800">{selectedMember.name}</h2>
+                                    <p className="text-pink-500 font-medium mb-4">"{selectedMember.nickname}"</p>
+                                    <div className="bg-pink-50 p-5 rounded-2xl text-gray-600 text-sm italic leading-relaxed">
+                                        {selectedMember.message}
+                                    </div>
+                                    <button onClick={() => setSelectedMember(null)} className="mt-6 w-full py-3 bg-gray-100 rounded-2xl font-bold text-gray-500 hover:bg-gray-200 transition">Đóng</button>
+                                </motion.div>
+                            </motion.div>
                         )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                    </AnimatePresence>
+                </div>
+            );
+        }
 
-      {/* Gallery Zoom Modal */}
-      <AnimatePresence>
-        {galleryModal !== null && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-center p-4">
-             <button onClick={() => setGalleryModal(null)} className="absolute top-6 right-6 text-white/50 hover:text-white transition"><X size={32} /></button>
-             <div className="relative w-full max-w-5xl flex items-center justify-center flex-1 mt-8">
-               <button onClick={(e) => { e.stopPropagation(); setGalleryModal(prev => prev > 0 ? prev - 1 : galleryItems.length - 1) }} className="absolute left-4 text-white/50 hover:text-white p-2 transition hidden md:block"><ChevronLeft size={48} /></button>
-               <img src={galleryItems[galleryModal].url} className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.5)]" alt="Zoomed" />
-               <button onClick={(e) => { e.stopPropagation(); setGalleryModal(prev => (prev + 1) % galleryItems.length) }} className="absolute right-4 text-white/50 hover:text-white p-2 transition hidden md:block"><ChevronRight size={48} /></button>
-             </div>
-             <div className="flex items-center gap-8 mt-6 pb-6">
-               <button onClick={() => handleReaction(galleryModal, 'like')} className="flex flex-col items-center hover:-translate-y-2 hover:scale-110 transition-transform drop-shadow-lg cursor-pointer"><span className="text-4xl">👍</span><span className="text-white text-sm font-bold mt-2">{galleryItems[galleryModal].reactions.like}</span></button>
-               <button onClick={() => handleReaction(galleryModal, 'love')} className="flex flex-col items-center hover:-translate-y-2 hover:scale-110 transition-transform drop-shadow-lg cursor-pointer"><span className="text-4xl">❤️</span><span className="text-white text-sm font-bold mt-2">{galleryItems[galleryModal].reactions.love}</span></button>
-               <button onClick={() => handleReaction(galleryModal, 'haha')} className="flex flex-col items-center hover:-translate-y-2 hover:scale-110 transition-transform drop-shadow-lg cursor-pointer"><span className="text-4xl">😂</span><span className="text-white text-sm font-bold mt-2">{galleryItems[galleryModal].reactions.haha}</span></button>
-               <button onClick={() => handleReaction(galleryModal, 'wow')} className="flex flex-col items-center hover:-translate-y-2 hover:scale-110 transition-transform drop-shadow-lg cursor-pointer"><span className="text-4xl">😮</span><span className="text-white text-sm font-bold mt-2">{galleryItems[galleryModal].reactions.wow}</span></button>
-               <button onClick={() => handleReaction(galleryModal, 'sad')} className="flex flex-col items-center hover:-translate-y-2 hover:scale-110 transition-transform drop-shadow-lg cursor-pointer"><span className="text-4xl">😢</span><span className="text-white text-sm font-bold mt-2">{galleryItems[galleryModal].reactions.sad}</span></button>
-             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Music Player Modal */}
-      <AnimatePresence>
-        {showMusicModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4 backdrop-blur-md">
-            <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} className="bg-white rounded-2xl w-full max-w-[360px] shadow-2xl overflow-hidden flex flex-col">
-              <div className="relative h-56 bg-gray-900 flex items-center justify-center overflow-hidden">
-                <img src={PLAYLIST[currentTrackIndex].cover} className="absolute inset-0 w-full h-full object-cover opacity-40 blur-md" alt="blur bg" />
-                <button onClick={() => setShowMusicModal(false)} className="absolute top-4 right-4 text-white/80 hover:text-white p-2 bg-black/20 rounded-full transition hover:bg-black/40"><X size={20} /></button>
-                <div className="relative z-10 flex flex-col items-center mt-2"><div className={`w-24 h-24 rounded-full border-[3px] border-white/80 shadow-2xl overflow-hidden mb-4 ${isPlaying ? 'spin-slow' : ''}`}><img src={PLAYLIST[currentTrackIndex].cover} className="w-full h-full object-cover" alt="Album Art" /></div><h3 className="text-white font-bold text-center px-4 truncate w-72 text-xl drop-shadow-md">{PLAYLIST[currentTrackIndex].title}</h3></div>
-              </div>
-              <div className="flex items-center justify-center gap-8 p-6 border-b border-gray-100 bg-white">
-                <button onClick={prevTrack} className="text-gray-400 hover:text-gray-900 transition"><SkipBack size={28} /></button>
-                <button onClick={togglePlay} className="w-16 h-16 bg-pink-500 text-white rounded-full flex items-center justify-center hover:bg-pink-600 transition shadow-lg active:scale-95">{isPlaying ? <Pause size={28} /> : <Play size={28} className="ml-1" />}</button>
-                <button onClick={nextTrack} className="text-gray-400 hover:text-gray-900 transition"><SkipForward size={28} /></button>
-              </div>
-              <div className="p-4 bg-gray-50 h-[240px] overflow-y-auto gallery-scroll">
-                {PLAYLIST.map((song, idx) => (
-                  <button key={song.id} onClick={() => { setCurrentTrackIndex(idx); setIsPlaying(true); }} className={`w-full flex items-center gap-4 p-3 rounded-2xl transition text-left mb-2 ${currentTrackIndex === idx ? 'bg-white shadow-md border border-gray-100' : 'hover:bg-gray-200/50'}`}>
-                    <img src={song.cover} className="w-12 h-12 rounded-xl object-cover shadow-sm" alt="cover" />
-                    <div className="flex-1 overflow-hidden"><p className={`text-sm truncate ${currentTrackIndex === idx ? 'font-bold text-pink-600' : 'text-gray-700 font-medium'}`}>{song.title}</p></div>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-    </div>
-  );
-}
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        
+        // Khởi động các icon Lucide
+        window.addEventListener('load', () => {
+            setTimeout(() => { if (window.lucide) window.lucide.createIcons(); }, 1000);
+        });
+    </script>
+</body>
+</html>
